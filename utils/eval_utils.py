@@ -61,10 +61,8 @@ def eval_agent(
         done = False
         while not done:
 
-            ## TODO: make this more generic
             with torch.no_grad():
-                action_dist = agent.act(state)
-                action = action_dist.sample()
+                action, _ = agent.act(state)
             
             state, reward, terminated, truncated, info = env.step(action.numpy())
             done=terminated or truncated

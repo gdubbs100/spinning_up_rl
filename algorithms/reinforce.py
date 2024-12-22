@@ -8,14 +8,22 @@ from utils.training_utils import calc_returns
 
 class ReinforceAgent:
 
-    def __init__(self, policy: nn.Module, discount_rate: float=.99, policy_lr: float=.01): 
+    def __init__(
+        self, 
+        policy: nn.Module, 
+        optimiser: optim.Optimizer, 
+        discount_rate: float=.99, 
+        policy_lr: float=.01
+        ):
+
         self.policy = policy
         self.discount_rate = discount_rate
+ 
+        self.optimiser = optimiser(self.policy.parameters(), lr=policy_lr) 
 
-        ## TODO: make optimiser an input to agent
-        self.optimiser = optim.SGD(self.policy.parameters(), lr=policy_lr)
         ## TODO: convert this to tensorboard logger?
         self.batch_results = dict()
+
         ## setup 
         self.init_records()
 
@@ -100,8 +108,9 @@ class ReinforceAgent:
             self.init_records()
 
     def act(self, x):
-        action_logits = self.policy(x)
-        return dist.Categorical(logits=action_logits)
+        action_dist = self.policy(x)
+        action = action_dist.sample()
+        return action, action_dist.log_prob(action).sum(dim=-1)
 
     def sample_trajectory(self, env: gym.Env, n_samples:int):
 
@@ -110,9 +119,7 @@ class ReinforceAgent:
             done = False
             while not done:
                 
-                action_dist = self.act(state) 
-                action = action_dist.sample()
-                action_log_prob = action_dist.log_prob(action)
+                action, action_log_prob = self.act(state) 
                 next_state, reward, terminated, truncated, info = env.step(action.detach().numpy())
                 done = terminated or truncated
 
