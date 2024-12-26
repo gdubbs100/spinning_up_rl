@@ -13,7 +13,8 @@ class ReinforceAgent:
         policy: nn.Module, 
         optimiser: optim.Optimizer, 
         discount_rate: float=.99, 
-        policy_lr: float=.01
+        policy_lr: float=.01,
+        num_eval_episodes: int = 5
         ):
 
         self.policy = policy
@@ -23,6 +24,10 @@ class ReinforceAgent:
 
         ## TODO: convert this to tensorboard logger?
         self.batch_results = dict()
+
+        ## evaluate
+        self.eval_results = dict()
+        self.num_eval_episodes = num_eval_episodes
 
         ## setup 
         self.init_records()
@@ -72,8 +77,28 @@ class ReinforceAgent:
             'episode_len': episode_len
         }
 
-    def train(self, env, num_iters, batch_size):
-        
+    def evaluate(self, env_name: str, num_eval_episodes:int):
+        rewards = []
+        env = gym.make(env_name)
+        for episode in range(num_eval_episodes):
+            state, info = env.reset()
+            done = False
+            
+            while not done:
+                
+                with torch.no_grad():
+                    action, _ = self.act(state) 
+
+                next_state, reward, terminated, truncated, info = env.step(action.numpy())
+                done = terminated or truncated
+
+                rewards.append(reward)
+
+                state = next_state
+        return sum(rewards) / num_eval_episodes
+
+    def train(self, env_name:str, num_iters:int, batch_size:int, eval_freq: int):
+        env = gym.make(env_name)
         for batch in range(num_iters):
             self.optimiser.zero_grad()
             self.sample_trajectory(env, batch_size)
@@ -95,7 +120,7 @@ class ReinforceAgent:
 
             ## log for post training review
             self.log_batch_results(
-                batch=batch,
+                batch=batch*batch_size,
                 log_probs=log_probs.mean().detach().numpy(),
                 rewards=rewards.sum().numpy() / batch_size,
                 returns=returns.mean().numpy(),
@@ -103,6 +128,15 @@ class ReinforceAgent:
                 policy_entropy=(torch.exp(log_probs)*log_probs).mean().detach().numpy(),
                 episode_len = rewards.size(-1) / batch_size
             )
+
+            ## run some evaluation (not strictly necessary given on-policy alg)
+            ## done to be consistent with off policy and to separate
+            ## training batch_size from num_eval_episodes
+            if batch % eval_freq == 0:
+                print(f'evaluating at {batch*batch_size}')
+                self.eval_results[batch*batch_size] = self.evaluate(
+                    env_name, self.num_eval_episodes
+                )
 
             ## clear out records for next batch
             self.init_records()
