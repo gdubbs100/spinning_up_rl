@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.distributions as dist
 
-import gymnasium as gym
 
 class DiscretePolicy(nn.Module):
 

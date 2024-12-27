@@ -8,4 +8,5 @@ Working through implementing, training and evaluating basic RL algorithms as adv
 4. PPO
 5. DDPG
 6. SAC
+7. TD3??
 

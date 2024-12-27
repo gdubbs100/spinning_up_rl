@@ -10,19 +10,15 @@ def plot_training_results(batch_results):
     Takes a dictionary of batch and training results and plots
     """
 
-    ## TODO: get some structure around what keys should be in reporting metrics
     results = {
-        'log_probs' : [batch_results[i]['log_probs'] for i in batch_results.keys()],
-        'rewards' : [batch_results[i]['rewards'] for i in batch_results.keys()],
-        'returns' : [batch_results[i]['returns'] for i in batch_results.keys()],
-        'policy_gradient' : [batch_results[i]['policy_gradient'] for i in batch_results.keys()],
-        'policy_entropy' : [batch_results[i]['policy_entropy'] for i in batch_results.keys()],
-        'episode_len' : [batch_results[i]['episode_len'] for i in batch_results.keys()],
+        key: [batch[key] for batch in batch_results.values()] 
+        for key in next(iter(batch_results.values()))
     }
 
+    ## TODO: ensure these dimensions match the input batch
     fig, ax = plt.subplots(2,3)
     ax = ax.flatten()
-    for i, res in enumerate(['rewards', 'returns', 'log_probs', 'policy_gradient', 'policy_entropy','episode_len']):
+    for i, res in enumerate(results.keys()):
         ax[i].plot(
             list(batch_results.keys()),
             results[res]
