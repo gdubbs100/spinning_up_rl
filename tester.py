@@ -29,7 +29,7 @@ if __name__ == "__main__":
         eval_freq = 10)
 
     # agent.train(env, num_iters=1000, batch_size=1)
-    agent.train("Acrobot-v1", num_episodes=50)
+    agent.train("Acrobot-v1", num_episodes=50, eval_freq=10)
     breakpoint()
     plot_training_results(agent.batch_results)
     # test_env = gym.make('CartPole-v1', render_mode = 'rgb_array')

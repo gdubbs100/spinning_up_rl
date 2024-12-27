@@ -108,7 +108,8 @@ class DQNAgent:
         tau: float = .005,
         target_update_freq: int = 10,
         eval_freq: int = 10,
-        num_eval_episodes: int = 10
+        num_eval_episodes: int = 10,
+        double_dqn: bool=True
         ):
 
         self.q_network = q_network
@@ -122,6 +123,7 @@ class DQNAgent:
         self.tau = tau
         self.target_update_freq = target_update_freq
         self.mini_batch_size = mini_batch_size
+        self.double_dqn = double_dqn
 
         self.buffer = ReplayBuffer(max_size=buffer_size)
  
@@ -164,10 +166,19 @@ class DQNAgent:
                 ) = self.buffer.sample(self.mini_batch_size)
 
                 # create computation graph
-                values = self.q_network(states)
-                values = values[torch.arange(values.size(0)), actions]
-                with torch.no_grad():
-                    next_values = self.target_network(next_states).max(-1).values
+                values = self.q_network(states)[torch.arange(self.mini_batch_size), actions]
+                # values = values[torch.arange(mini_batch_size), actions]
+
+                if self.double_dqn:
+                    with torch.no_grad():
+                        
+                        next_actions =  torch.argmax(self.q_network(next_states), dim=-1)
+                        # breakpoint()
+                        next_values = self.target_network(next_states)[torch.arange(self.mini_batch_size), next_actions]
+
+                else:
+                    with torch.no_grad():
+                        next_values = self.target_network(next_states).max(-1).values
 
                 criterion = nn.SmoothL1Loss()#nn.MSELoss()#
                 loss = criterion(
@@ -271,34 +282,19 @@ class DQNAgent:
                     episode_len = len(rewards)
                 )
 
+                self.update_target_network()
                 
                 state = next_state
 
                 if done:
 
-                    if episode % self.target_update_freq == 0:
-                        self.update_target_network()
+                    # if episode % self.target_update_freq == 0:
+                        
                     if episode % eval_freq == 0:
                         print(f"evaluating at {episode}...")
                         self.eval_results[episode] = (
                             self.evaluate(env_name, self.num_eval_episodes)
                         )
-
-    # def evaluate_agent(self, episode: int, num_eval_episodes: int):
-    #     results = dict()
-    #     for episode in range(num_eval_episodes):
-    #         state, info = env.reset()
-    #         done = False
-    #         rewards = []
-    #         while not done:
-                
-    #             with torch.no_grad():
-    #                 action, _ = self.act(state) 
-
-    #             next_state, reward, terminated, truncated, info = env.step(action.numpy())
-    #             done = terminated or truncated
-
-    #         self.eval_results[episode] = 
 
 
 
