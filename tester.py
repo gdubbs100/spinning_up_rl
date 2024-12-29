@@ -11,7 +11,7 @@ from networks.policy import DiscretePolicy
 from utils.eval_utils import plot_training_results, eval_agent
 
 if __name__ == "__main__":
-    ENV_NAME = 'Acrobot-v1'
+    ENV_NAME = 'CartPole-v1'
     env = gym.make(ENV_NAME)
     q_net = Qnet(
         env.observation_space.shape[0],
@@ -34,8 +34,7 @@ if __name__ == "__main__":
         mini_batch_size=128,
         epsilon=.9,
         discount_rate=.99,
-        num_eval_episodes=5,
-        eval_freq = 10)
+        num_eval_episodes=10)
     # agent = ReinforceAgent(policy, policy_lr=1.0e-2, optimiser=optim.SGD)
 
     # agent.train(
@@ -47,7 +46,8 @@ if __name__ == "__main__":
     # env_name:str, num_envs:int, num_iters: int, steps_per_update:int, eval_freq: int
 
     # agent.train(env, num_iters=1000, batch_size=1)
-    agent.train(ENV_NAME, num_episodes=50, eval_freq=10)
+    agent.train(ENV_NAME, num_envs=4, num_iters=31, steps_per_iter=500, eval_freq=10)
+    # env_name: str, num_envs: int, num_iters:int, steps_per_iter:int, eval_freq: int
 
     print(agent.eval_results)
     plot_training_results(agent.batch_results)

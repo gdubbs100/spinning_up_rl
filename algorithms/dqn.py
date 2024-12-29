@@ -115,7 +115,6 @@ class DQNAgent:
         eps_decay: int = 1000,
         tau: float = .005,
         target_update_freq: int = 10,
-        eval_freq: int = 10,
         num_eval_episodes: int = 10,
         double_dqn: bool=True
         ):
@@ -172,17 +171,14 @@ class DQNAgent:
                     dones,
                     next_states
                 ) = self.buffer.sample(self.mini_batch_size)
-                # breakpoint()
 
                 # create computation graph
                 values = self.q_network(states)[torch.arange(self.mini_batch_size), actions]
-                # values = values[torch.arange(mini_batch_size), actions]
 
                 if self.double_dqn:
                     with torch.no_grad():
                         
                         next_actions =  torch.argmax(self.q_network(next_states), dim=-1)
-                        # breakpoint()
                         next_values = self.target_network(next_states)[torch.arange(self.mini_batch_size), next_actions]
 
                 else:
@@ -248,35 +244,33 @@ class DQNAgent:
 
                 next_state, reward, terminated, truncated, info = env.step(action.numpy())
                 done = terminated or truncated
-                # done = [any(i) for i in zip(terminated, truncated)] 
 
                 rewards.append(reward)
 
                 state = next_state
         return sum(rewards) / num_eval_episodes
 
-    def train(self, env_name: str, num_episodes:int, eval_freq: int):
-        num_envs = 2
-        steps_per_update=500
+    def train(self, env_name: str, num_envs: int, num_iters:int, steps_per_iter:int, eval_freq: int):
+
         env = gym.make_vec(env_name, num_envs=num_envs)
 
-        for episode in range(num_episodes):
+        for batch in range(num_iters):
             state, info = env.reset()
-        #     done = False
             rewards = []
-            # while not done:
-            for step in range(steps_per_update):
+            losses = []
+            values = []
+            next_values = []
+            completed_episodes = 0
+            for step in range(steps_per_iter):
                 
                 with torch.no_grad():
                     action, _ = self.act(state)
                     action = action.numpy()
 
                 next_state, reward, terminated, truncated, info = env.step(action)
-                # breakpoint()
-                # done = terminated or truncated
                 done = [any(i) for i in zip(terminated, truncated)] 
-                # breakpoint()
-                rewards.append(reward)
+
+                # log env transitions individually
                 for i in range(num_envs):
                     t= Transition(
                         action=action[i], 
@@ -288,30 +282,36 @@ class DQNAgent:
 
                     self.buffer.insert(t)
 
-                loss, values, next_values = self.update_model()
+                loss, value, next_value = self.update_model()
 
-                ## TODO: is this the right place to log?
-                self.log_batch_results(
-                    batch=episode,
-                    q_values = values.detach().mean().numpy(),
-                    next_q_values = next_values.mean().numpy(),
-                    rewards=sum(rewards),
-                    loss=loss.detach().mean().numpy(),
-                    episode_len = len(rewards)
-                )
+                ## store episode results
+                rewards.append(np.sum(reward))
+                losses.append(loss.detach().mean().numpy())
+                values.append(value.detach().mean().numpy())
+                next_values.append(next_value.detach().mean().numpy())
+                completed_episodes += sum(done)
 
                 self.update_target_network()
                 
                 state = next_state
 
+            ## log training results 
+            self.log_batch_results(
+                batch=batch,
+                q_values = np.mean(values),
+                next_q_values = np.mean(next_values),
+                rewards= np.sum(rewards) / completed_episodes,
+                loss=np.mean(losses),
+                episode_len = (steps_per_iter*num_envs) / completed_episodes 
+            )
 
                         
-            if episode % eval_freq == 0:
-                print(f"evaluating at {episode}...")
-                self.eval_results[episode] = (
+            if batch % eval_freq == 0:
+                print(f"evaluating at {batch}...")
+                self.eval_results[batch] = (
                     self.evaluate(env_name, self.num_eval_episodes)
                 )
-                print(self.eval_results[episode])
+                print(self.eval_results[batch])
 
 
 

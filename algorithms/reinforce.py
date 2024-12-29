@@ -119,11 +119,13 @@ class ReinforceAgent:
                 state = next_state
         return sum(rewards) / num_eval_episodes
 
-    def sample_trajectory(self, env: gym.Env, steps_per_update:int):
+    def sample_trajectory(self, env: gym.Env, num_steps:int):
         state, info = env.reset()
-        for step in range(steps_per_update):
+        for step in range(num_steps):
             action, action_log_prob = self.act(state) 
             next_state, reward, terminated, truncated, info = env.step(action.detach().numpy())
+            ## TODO: calculation of returns would benefit from differentiating terminated/ truncated
+            ## but need to keep truncated for number of episode calcs.
             done = [any(i) for i in zip(terminated, truncated)] 
 
             self.append_record(
@@ -137,11 +139,11 @@ class ReinforceAgent:
 
             state = next_state
 
-    def train(self, env_name:str, num_envs:int, num_iters: int, steps_per_update:int, eval_freq: int):
+    def train(self, env_name:str, num_envs:int, num_iters: int, steps_per_iter:int, eval_freq: int):
         env = gym.make_vec(env_name, num_envs)
         for batch in range(num_iters):
             
-            self.sample_trajectory(env, steps_per_update)
+            self.sample_trajectory(env, steps_per_iter)
 
             ## get values to log
             log_probs = torch.stack(self.records['action_log_prob']).T 
