@@ -80,11 +80,19 @@ class ReplayBuffer():
         )
         # breakpoint()
         ## convert to pytorch
+        ## .permute(1,0,2)
+        # return (
+        #     torch.tensor(np.array(actions).T), ## only works for discrete actions
+        #     torch.tensor(np.array(states)).permute(1,0,2),
+        #     torch.tensor(np.array(rewards).T),
+        #     torch.tensor(np.array(dones), dtype=torch.int32).T,
+        #     torch.tensor(np.array(next_states)).permute(1,0,2)
+        # )
         return (
-            torch.tensor(np.array(actions)),
+            torch.tensor(np.array(actions)), ## only works for discrete actions
             torch.tensor(np.array(states)),
-            torch.tensor(rewards),
-            torch.tensor(dones, dtype=torch.int32),
+            torch.tensor(np.array(rewards)),
+            torch.tensor(np.array(dones), dtype=torch.int32),
             torch.tensor(np.array(next_states))
         )
 
@@ -164,6 +172,7 @@ class DQNAgent:
                     dones,
                     next_states
                 ) = self.buffer.sample(self.mini_batch_size)
+                # breakpoint()
 
                 # create computation graph
                 values = self.q_network(states)[torch.arange(self.mini_batch_size), actions]
@@ -239,6 +248,7 @@ class DQNAgent:
 
                 next_state, reward, terminated, truncated, info = env.step(action.numpy())
                 done = terminated or truncated
+                # done = [any(i) for i in zip(terminated, truncated)] 
 
                 rewards.append(reward)
 
@@ -246,29 +256,37 @@ class DQNAgent:
         return sum(rewards) / num_eval_episodes
 
     def train(self, env_name: str, num_episodes:int, eval_freq: int):
-        env = gym.make(env_name)
+        num_envs = 2
+        steps_per_update=500
+        env = gym.make_vec(env_name, num_envs=num_envs)
 
         for episode in range(num_episodes):
             state, info = env.reset()
-            done = False
+        #     done = False
             rewards = []
-            while not done:
+            # while not done:
+            for step in range(steps_per_update):
                 
                 with torch.no_grad():
-                    action, _ = self.act(state) 
+                    action, _ = self.act(state)
+                    action = action.numpy()
 
-                next_state, reward, terminated, truncated, info = env.step(action.numpy())
-                done = terminated or truncated
+                next_state, reward, terminated, truncated, info = env.step(action)
+                # breakpoint()
+                # done = terminated or truncated
+                done = [any(i) for i in zip(terminated, truncated)] 
+                # breakpoint()
                 rewards.append(reward)
-                t= Transition(
-                    action=action.numpy(), 
-                    state=state, 
-                    reward=reward, 
-                    done=done, 
-                    next_state=next_state
-                )
+                for i in range(num_envs):
+                    t= Transition(
+                        action=action[i], 
+                        state=state[i], 
+                        reward=reward[i], 
+                        done=done[i], 
+                        next_state=next_state[i]
+                    )
 
-                self.buffer.insert(t)
+                    self.buffer.insert(t)
 
                 loss, values, next_values = self.update_model()
 
@@ -286,15 +304,14 @@ class DQNAgent:
                 
                 state = next_state
 
-                if done:
 
-                    # if episode % self.target_update_freq == 0:
                         
-                    if episode % eval_freq == 0:
-                        print(f"evaluating at {episode}...")
-                        self.eval_results[episode] = (
-                            self.evaluate(env_name, self.num_eval_episodes)
-                        )
+            if episode % eval_freq == 0:
+                print(f"evaluating at {episode}...")
+                self.eval_results[episode] = (
+                    self.evaluate(env_name, self.num_eval_episodes)
+                )
+                print(self.eval_results[episode])
 
 
 

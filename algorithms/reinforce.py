@@ -169,7 +169,7 @@ class ReinforceAgent:
                 returns=returns.flatten()[mask].sum().numpy()/  (dones.flatten()[mask].sum()),
                 policy_gradient=loss.detach().numpy(),
                 policy_entropy=(torch.exp(log_probs)*log_probs).mean().detach().numpy(),
-                episode_len = (1-dones).flatten()[mask].sum() / dones.flatten()[mask].sum() ## always going to be steps_per_update
+                episode_len = (1-dones).flatten()[mask].sum() / dones.flatten()[mask].sum() 
             )
 
             ## run some evaluation (not strictly necessary given on-policy alg)
