@@ -24,7 +24,7 @@ class DiscretePolicy(nn.Module):
         )
 
     def forward(self, x):
-        x = torch.tensor(x)
+        # x = torch.tensor(x)
         x = self.net(x)
         return dist.Categorical(logits=x)
 
@@ -50,6 +50,6 @@ class ContinuousPolicy(nn.Module):
         )
 
     def forward(self, x):
-        x = torch.tensor(x)
+        # x = torch.tensor(x)
         x = self.net(x)
         return dist.Normal(loc=x, scale = self.logstd.exp())
