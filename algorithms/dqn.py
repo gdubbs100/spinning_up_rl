@@ -80,11 +80,19 @@ class ReplayBuffer():
         )
         # breakpoint()
         ## convert to pytorch
+        ## .permute(1,0,2)
+        # return (
+        #     torch.tensor(np.array(actions).T), ## only works for discrete actions
+        #     torch.tensor(np.array(states)).permute(1,0,2),
+        #     torch.tensor(np.array(rewards).T),
+        #     torch.tensor(np.array(dones), dtype=torch.int32).T,
+        #     torch.tensor(np.array(next_states)).permute(1,0,2)
+        # )
         return (
-            torch.tensor(np.array(actions)),
+            torch.tensor(np.array(actions)), ## only works for discrete actions
             torch.tensor(np.array(states)),
-            torch.tensor(rewards),
-            torch.tensor(dones, dtype=torch.int32),
+            torch.tensor(np.array(rewards)),
+            torch.tensor(np.array(dones), dtype=torch.int32),
             torch.tensor(np.array(next_states))
         )
 
@@ -107,7 +115,6 @@ class DQNAgent:
         eps_decay: int = 1000,
         tau: float = .005,
         target_update_freq: int = 10,
-        eval_freq: int = 10,
         num_eval_episodes: int = 10,
         double_dqn: bool=True
         ):
@@ -167,13 +174,11 @@ class DQNAgent:
 
                 # create computation graph
                 values = self.q_network(states)[torch.arange(self.mini_batch_size), actions]
-                # values = values[torch.arange(mini_batch_size), actions]
 
                 if self.double_dqn:
                     with torch.no_grad():
                         
                         next_actions =  torch.argmax(self.q_network(next_states), dim=-1)
-                        # breakpoint()
                         next_values = self.target_network(next_states)[torch.arange(self.mini_batch_size), next_actions]
 
                 else:
@@ -245,56 +250,68 @@ class DQNAgent:
                 state = next_state
         return sum(rewards) / num_eval_episodes
 
-    def train(self, env_name: str, num_episodes:int, eval_freq: int):
-        env = gym.make(env_name)
+    def train(self, env_name: str, num_envs: int, num_iters:int, steps_per_iter:int, eval_freq: int):
 
-        for episode in range(num_episodes):
+        env = gym.make_vec(env_name, num_envs=num_envs)
+
+        for batch in range(num_iters):
             state, info = env.reset()
-            done = False
             rewards = []
-            while not done:
+            losses = []
+            values = []
+            next_values = []
+            completed_episodes = 0
+            for step in range(steps_per_iter):
                 
                 with torch.no_grad():
-                    action, _ = self.act(state) 
+                    action, _ = self.act(state)
+                    action = action.numpy()
 
-                next_state, reward, terminated, truncated, info = env.step(action.numpy())
-                done = terminated or truncated
-                rewards.append(reward)
-                t= Transition(
-                    action=action.numpy(), 
-                    state=state, 
-                    reward=reward, 
-                    done=done, 
-                    next_state=next_state
-                )
+                next_state, reward, terminated, truncated, info = env.step(action)
+                done = [any(i) for i in zip(terminated, truncated)] 
 
-                self.buffer.insert(t)
+                # log env transitions individually
+                for i in range(num_envs):
+                    t= Transition(
+                        action=action[i], 
+                        state=state[i], 
+                        reward=reward[i], 
+                        done=done[i], 
+                        next_state=next_state[i]
+                    )
 
-                loss, values, next_values = self.update_model()
+                    self.buffer.insert(t)
 
-                ## TODO: is this the right place to log?
-                self.log_batch_results(
-                    batch=episode,
-                    q_values = values.detach().mean().numpy(),
-                    next_q_values = next_values.mean().numpy(),
-                    rewards=sum(rewards),
-                    loss=loss.detach().mean().numpy(),
-                    episode_len = len(rewards)
-                )
+                loss, value, next_value = self.update_model()
+
+                ## store episode results
+                rewards.append(np.sum(reward))
+                losses.append(loss.detach().mean().numpy())
+                values.append(value.detach().mean().numpy())
+                next_values.append(next_value.detach().mean().numpy())
+                completed_episodes += sum(done)
 
                 self.update_target_network()
                 
                 state = next_state
 
-                if done:
+            ## log training results 
+            self.log_batch_results(
+                batch=batch*steps_per_iter*num_envs,
+                q_values = np.mean(values),
+                next_q_values = np.mean(next_values),
+                rewards= np.sum(rewards) / completed_episodes,
+                loss=np.mean(losses),
+                episode_len = (steps_per_iter*num_envs) / completed_episodes 
+            )
 
-                    # if episode % self.target_update_freq == 0:
                         
-                    if episode % eval_freq == 0:
-                        print(f"evaluating at {episode}...")
-                        self.eval_results[episode] = (
-                            self.evaluate(env_name, self.num_eval_episodes)
-                        )
+            if batch % eval_freq == 0:
+                print(f"evaluating at {batch*steps_per_iter*num_envs}...")
+                self.eval_results[batch*steps_per_iter*num_envs] = (
+                    self.evaluate(env_name, self.num_eval_episodes)
+                )
+                print(self.eval_results[batch*steps_per_iter*num_envs])
 
 
 
