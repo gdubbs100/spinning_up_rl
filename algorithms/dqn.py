@@ -297,7 +297,7 @@ class DQNAgent:
 
             ## log training results 
             self.log_batch_results(
-                batch=batch,
+                batch=batch*steps_per_iter*num_envs,
                 q_values = np.mean(values),
                 next_q_values = np.mean(next_values),
                 rewards= np.sum(rewards) / completed_episodes,
@@ -307,11 +307,11 @@ class DQNAgent:
 
                         
             if batch % eval_freq == 0:
-                print(f"evaluating at {batch}...")
-                self.eval_results[batch] = (
+                print(f"evaluating at {batch*steps_per_iter*num_envs}...")
+                self.eval_results[batch*steps_per_iter*num_envs] = (
                     self.evaluate(env_name, self.num_eval_episodes)
                 )
-                print(self.eval_results[batch])
+                print(self.eval_results[batch*steps_per_iter*num_envs])
 
 
 

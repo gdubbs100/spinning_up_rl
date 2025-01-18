@@ -178,8 +178,8 @@ class ReinforceAgent:
             ## done to be consistent with off policy and to separate
             ## training batch_size from num_eval_episodes
             if batch % eval_freq == 0:
-                print(f'evaluating at {batch*steps_per_update}')
-                self.eval_results[batch*steps_per_update] = self.evaluate(
+                print(f'evaluating at {batch*steps_per_iter*num_envs}')
+                self.eval_results[batch*steps_per_iter*num_envs] = self.evaluate(
                     env_name, self.num_eval_episodes
                 )
 
