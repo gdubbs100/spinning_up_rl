@@ -134,7 +134,10 @@ class DQNAgent:
         self.double_dqn = double_dqn
 
         ## replay buffer
-        self.buffer = ReplayBuffer(max_size=buffer_size)
+        self.buffer = ReplayBuffer(
+            device = self.device, 
+            max_size=buffer_size
+        )
  
         ## TODO: convert this to tensorboard logger?
         self.batch_results = dict()
