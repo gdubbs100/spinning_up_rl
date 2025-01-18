@@ -34,10 +34,12 @@ class ReplayBuffer():
 
     def __init__(
         self, 
+        device,
         max_size: int, 
         weight_func: callable = lambda x: [1/len(x)]*len(x),
         with_replacement: bool = False
     ):
+        self.device = device
         self.max_size = max_size
         self.transitions = []
         self.weight_func = weight_func
@@ -80,11 +82,11 @@ class ReplayBuffer():
         )
 
         return (
-            torch.tensor(np.array(actions)), ## only works for discrete actions
-            torch.tensor(np.array(states)),
-            torch.tensor(np.array(rewards)),
-            torch.tensor(np.array(dones), dtype=torch.int32),
-            torch.tensor(np.array(next_states))
+            torch.tensor(np.array(actions)).to(self.device), ## only works for discrete actions
+            torch.tensor(np.array(states)).to(self.device),
+            torch.tensor(np.array(rewards)).to(self.device),
+            torch.tensor(np.array(dones), dtype=torch.int32).to(self.device),
+            torch.tensor(np.array(next_states)).to(self.device)
         )
 
         
@@ -240,7 +242,7 @@ class DQNAgent:
                 with torch.no_grad():
                     action, _ = self.act(state) 
 
-                next_state, reward, terminated, truncated, info = env.step(action.numpy())
+                next_state, reward, terminated, truncated, info = env.step(action.cpu().numpy())
                 done = terminated or truncated
 
                 rewards.append(reward)
@@ -263,7 +265,7 @@ class DQNAgent:
                 
                 with torch.no_grad():
                     action, _ = self.act(state)
-                    action = action.numpy()
+                    action = action.cpu().numpy()
 
                 next_state, reward, terminated, truncated, info = env.step(action)
                 done = [any(i) for i in zip(terminated, truncated)] 
@@ -284,9 +286,9 @@ class DQNAgent:
 
                 ## store episode results
                 rewards.append(np.sum(reward))
-                losses.append(loss.detach().mean().numpy())
-                values.append(value.detach().mean().numpy())
-                next_values.append(next_value.detach().mean().numpy())
+                losses.append(loss.cpu().detach().mean().numpy())
+                values.append(value.cpu().detach().mean().numpy())
+                next_values.append(next_value.cpu().detach().mean().numpy())
                 completed_episodes += sum(done)
 
                 self.update_target_network()
