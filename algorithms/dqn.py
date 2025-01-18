@@ -78,16 +78,7 @@ class ReplayBuffer():
                 *[(i.action, i.state, i.reward, i.done, i.next_state) 
                 for i in self.sample_transitions(num_samples)]
         )
-        # breakpoint()
-        ## convert to pytorch
-        ## .permute(1,0,2)
-        # return (
-        #     torch.tensor(np.array(actions).T), ## only works for discrete actions
-        #     torch.tensor(np.array(states)).permute(1,0,2),
-        #     torch.tensor(np.array(rewards).T),
-        #     torch.tensor(np.array(dones), dtype=torch.int32).T,
-        #     torch.tensor(np.array(next_states)).permute(1,0,2)
-        # )
+
         return (
             torch.tensor(np.array(actions)), ## only works for discrete actions
             torch.tensor(np.array(states)),
