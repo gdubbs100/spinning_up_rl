@@ -118,9 +118,17 @@ class DQNAgent:
         num_eval_episodes: int = 10,
         double_dqn: bool=True
         ):
+        ## get device
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        self.q_network = q_network
-        self.target_network = copy.deepcopy(self.q_network)
+        ## networks
+        self.q_network = q_network.to(self.device)
+        self.target_network = copy.deepcopy(self.q_network).to(self.device)
+        self.optimiser = optimiser(
+            self.q_network.parameters(), 
+            lr=lr) 
+
+        ## hyper-params
         self.discount_rate = discount_rate
         self.epsilon = epsilon
         self.eps_start = epsilon
@@ -132,12 +140,9 @@ class DQNAgent:
         self.mini_batch_size = mini_batch_size
         self.double_dqn = double_dqn
 
+        ## replay buffer
         self.buffer = ReplayBuffer(max_size=buffer_size)
  
-        self.optimiser = optimiser(
-            self.q_network.parameters(), 
-            lr=lr) 
-
         ## TODO: convert this to tensorboard logger?
         self.batch_results = dict()
 
@@ -205,7 +210,9 @@ class DQNAgent:
     def act(self, x):
 
         self.increment_epsilon()
-        Q = self.q_network(x)
+        Q = self.q_network(
+            torch.tensor(x).to(self.device)
+        )
         if torch.rand(1) < self.epsilon:
             # uniform sampling
             action = dist.Categorical(
