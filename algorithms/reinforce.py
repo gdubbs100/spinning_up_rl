@@ -171,8 +171,8 @@ class ReinforceAgent:
             self.log_batch_results(
                 batch=batch,
                 log_probs=log_probs.mean().cpu().detach().numpy(),
-                rewards=rewards.flatten()[mask].sum().cpu().numpy() / (dones.flatten()[mask].sum()),
-                returns=returns.flatten()[mask].sum().cpu().numpy()/  (dones.flatten()[mask].sum()),
+                rewards=rewards.flatten()[mask].sum().cpu().numpy() / (dones.flatten()[mask].sum().cpu().numpy()),
+                returns=returns.flatten()[mask].sum().cpu().numpy()/  (dones.flatten()[mask].sum().cpu().numpy()),
                 policy_gradient=loss.cpu().detach().numpy(),
                 policy_entropy=(torch.exp(log_probs)*log_probs).mean().cpu().detach().numpy(),
                 episode_len = (1-dones).flatten()[mask].sum() / dones.flatten()[mask].sum() 
