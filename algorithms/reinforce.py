@@ -36,7 +36,8 @@ class ReinforceAgent:
         optimiser: optim.Optimizer, 
         discount_rate: float=.99, 
         policy_lr: float=.01,
-        num_eval_episodes: int = 5
+        num_eval_episodes: int = 5,
+        seed: int = 42
         ):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.policy = policy.to(self.device)
@@ -53,6 +54,8 @@ class ReinforceAgent:
 
         ## setup 
         self.init_records()
+
+        self.seed = seed
 
     def init_records(self):
         self.records = {
@@ -103,7 +106,7 @@ class ReinforceAgent:
         rewards = []
         env = gym.make(env_name)
         for episode in range(num_eval_episodes):
-            state, info = env.reset()
+            state, info = env.reset(seed=self.seed)
             done = False
             
             while not done:
@@ -122,7 +125,7 @@ class ReinforceAgent:
         return sum(rewards) / num_eval_episodes
 
     def sample_trajectory(self, env: gym.Env, num_steps:int):
-        state, info = env.reset()
+        state, info = env.reset(seed=self.seed)
         for step in range(num_steps):
             action, action_log_prob = self.act(state) 
             next_state, reward, terminated, truncated, info = env.step(

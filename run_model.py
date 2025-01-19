@@ -1,7 +1,13 @@
+import os
 import argparse
+import json
+
 import torch
 import torch.optim as optim
 import gymnasium as gym
+import pandas as pd
+
+from datetime import datetime
 
 from algorithms.reinforce import ReinforceAgent
 from networks.policy import DiscretePolicy, ContinuousPolicy
@@ -11,12 +17,14 @@ from networks.value_networks import Qnet
 
 from utils.training_utils import set_seed
 
+
 ## add argparse args to determine:
 ## - model, environment, n timesteps, hyper params
 parser = argparse.ArgumentParser()
 parser.add_argument('--algorithm', type=str, default='reinforce', help='specify algorithm')
 parser.add_argument('--env_name', type=str, default='CartPole-v1', help='specify gymnasium env')
 parser.add_argument('--seed', type=int, default=42, help='random seed')
+parser.add_argument('--log_dir', type=str, default='./logs', help='location to save runs - will be saved in a subfolder of this dir')
 
 ## training params
 parser.add_argument('--num_envs', type=int, default=4, help='specify the number of environments to run in parallel')
@@ -37,14 +45,14 @@ parser.add_argument('--epsilon', type=float, default=0.9, help='epsilon value fo
 args = parser.parse_args()
 if __name__ == "__main__":
 
-    print(f"args: {args}")
+    # print(f"args: {args}")
+    timestamp = datetime.now().strftime(format='%Y%m%d%H%M%S')
     set_seed(args.seed)
     ## NOTE: this is not the actual env used for training
     env = gym.make(args.env_name)
 
     ## create agents
     if args.algorithm == 'reinforce':
-        print('running reinforce')
         if isinstance(env.action_space, gym.spaces.discrete.Discrete):
             ## TODO: create network parameters as an argparse input
             policy = DiscretePolicy(
@@ -98,7 +106,7 @@ if __name__ == "__main__":
         raise ValueError(f"no algorithm named: {args.algorithm}...")
 
     ## train agents
-    print(f"training agent using {args.algorithm} on environment {args.env_name}...")
+    print(f"{timestamp}: training agent using {args.algorithm} on environment {args.env_name}...")
     agent.train(
         env_name=args.env_name, 
         num_envs=args.num_envs, 
@@ -106,6 +114,23 @@ if __name__ == "__main__":
         steps_per_iter=args.steps_per_iter, 
         eval_freq=args.eval_freq
     )
+
+    ## setup logging dir
+    log_dir = f"{args.log_dir}/{args.env_name}/{args.algorithm}_{args.seed}/{timestamp}/"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    train_results = pd.DataFrame(agent.batch_results).T
+    test_results = pd.DataFrame(
+        agent.eval_results.values(), 
+        index=agent.eval_results.keys(), 
+        columns=['reward']
+    )
+
+    train_results.to_csv(log_dir + 'train_results.csv')
+    test_results.to_csv(log_dir + 'test_results.csv')
+    with open(log_dir + 'hyperparams.json', 'w') as json_file:
+        json.dump(vars(args), json_file, indent=4)
 
     print(agent.eval_results)
 
