@@ -109,7 +109,8 @@ class DQNAgent:
         tau: float = .005,
         target_update_freq: int = 10,
         num_eval_episodes: int = 10,
-        double_dqn: bool=True
+        double_dqn: bool=True,
+        seed: int = 42
         ):
         ## get device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -145,6 +146,9 @@ class DQNAgent:
         ## evaluation
         self.num_eval_episodes = num_eval_episodes
         self.eval_results = dict()
+
+        ## set seed
+        self.seed = seed
 
     def log_batch_results(
         self, 
@@ -237,7 +241,7 @@ class DQNAgent:
         rewards = []
         env = gym.make(env_name)
         for episode in range(num_eval_episodes):
-            state, info = env.reset()
+            state, info = env.reset(seed=self.seed)
             done = False
             
             while not done:
@@ -258,7 +262,7 @@ class DQNAgent:
         env = gym.make_vec(env_name, num_envs=num_envs)
 
         for batch in range(num_iters):
-            state, info = env.reset()
+            state, info = env.reset(seed=self.seed)
             rewards = []
             losses = []
             values = []

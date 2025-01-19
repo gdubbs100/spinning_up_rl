@@ -1,4 +1,14 @@
 import torch
+import random
+import numpy as np
+
+def set_seed(seed: int):
+    print('Seeding random, torch, numpy...')
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.random.manual_seed(seed)
+    np.random.seed(seed)
+
 
 def calc_returns(
     rewards: torch.FloatTensor, 

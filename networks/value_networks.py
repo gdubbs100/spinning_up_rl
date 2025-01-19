@@ -27,6 +27,5 @@ class Qnet(nn.Module):
         )
     
     def forward(self, x):
-        # x = torch.tensor(x)
         x = self.net(x)
         return x
