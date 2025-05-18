@@ -36,10 +36,11 @@ class ReinforceAgent:
         optimiser: optim.Optimizer, 
         discount_rate: float=.99, 
         policy_lr: float=.01,
-        num_eval_episodes: int = 5
+        num_eval_episodes: int = 5,
+        seed: int = 42
         ):
-
-        self.policy = policy
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.policy = policy.to(self.device)
         self.discount_rate = discount_rate
  
         self.optimiser = optimiser(self.policy.parameters(), lr=policy_lr) 
@@ -53,6 +54,8 @@ class ReinforceAgent:
 
         ## setup 
         self.init_records()
+
+        self.seed = seed
 
     def init_records(self):
         self.records = {
@@ -103,7 +106,7 @@ class ReinforceAgent:
         rewards = []
         env = gym.make(env_name)
         for episode in range(num_eval_episodes):
-            state, info = env.reset()
+            state, info = env.reset(seed=self.seed)
             done = False
             
             while not done:
@@ -111,7 +114,9 @@ class ReinforceAgent:
                 with torch.no_grad():
                     action, _ = self.act(state) 
 
-                next_state, reward, terminated, truncated, info = env.step(action.squeeze(-1).numpy().item())
+                next_state, reward, terminated, truncated, info = env.step(
+                    action.squeeze(-1).cpu().numpy().item()
+                )
                 done = terminated or truncated
 
                 rewards.append(reward)
@@ -120,10 +125,12 @@ class ReinforceAgent:
         return sum(rewards) / num_eval_episodes
 
     def sample_trajectory(self, env: gym.Env, num_steps:int):
-        state, info = env.reset()
+        state, info = env.reset(seed=self.seed)
         for step in range(num_steps):
             action, action_log_prob = self.act(state) 
-            next_state, reward, terminated, truncated, info = env.step(action.detach().numpy())
+            next_state, reward, terminated, truncated, info = env.step(
+                action.cpu().detach().numpy()
+            )
             ## TODO: calculation of returns would benefit from differentiating terminated/ truncated
             ## but need to keep truncated for number of episode calcs.
             done = [any(i) for i in zip(terminated, truncated)] 
@@ -146,9 +153,9 @@ class ReinforceAgent:
             self.sample_trajectory(env, steps_per_iter)
 
             ## get values to log
-            log_probs = torch.stack(self.records['action_log_prob']).T 
-            dones = torch.tensor(np.array(self.records['done']), dtype=torch.int32).T
-            rewards = torch.tensor(np.array(self.records['reward'])).T
+            log_probs = torch.stack(self.records['action_log_prob']).T.to(self.device) 
+            dones = torch.tensor(np.array(self.records['done']), dtype=torch.int32).T.to(self.device)
+            rewards = torch.tensor(np.array(self.records['reward'])).T.to(self.device)
             returns = calc_returns(rewards, dones, self.discount_rate)
             ## standardise returns
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
@@ -166,12 +173,12 @@ class ReinforceAgent:
             ## log for post training review
             self.log_batch_results(
                 batch=batch,
-                log_probs=log_probs.mean().detach().numpy(),
-                rewards=rewards.flatten()[mask].sum().numpy() / (dones.flatten()[mask].sum()),
-                returns=returns.flatten()[mask].sum().numpy()/  (dones.flatten()[mask].sum()),
-                policy_gradient=loss.detach().numpy(),
-                policy_entropy=(torch.exp(log_probs)*log_probs).mean().detach().numpy(),
-                episode_len = (1-dones).flatten()[mask].sum() / dones.flatten()[mask].sum() 
+                log_probs=log_probs.mean().cpu().detach().numpy(),
+                rewards=rewards.flatten()[mask].sum().cpu().numpy() / (dones.flatten()[mask].sum().cpu().numpy()),
+                returns=returns.flatten()[mask].sum().cpu().numpy()/  (dones.flatten()[mask].sum().cpu().numpy()),
+                policy_gradient=loss.cpu().detach().numpy(),
+                policy_entropy=(torch.exp(log_probs)*log_probs).mean().cpu().detach().numpy(),
+                episode_len = (1-dones).flatten()[mask].sum().cpu().numpy() / dones.flatten()[mask].sum().cpu().numpy() 
             )
 
             ## run some evaluation (not strictly necessary given on-policy alg)
@@ -187,6 +194,6 @@ class ReinforceAgent:
             self.init_records()
 
     def act(self, x):
-        action_dist = self.policy(x)
+        action_dist = self.policy(torch.tensor(x).to(self.device))
         action = action_dist.sample()
         return action, action_dist.log_prob(action)
