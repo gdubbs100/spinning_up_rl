@@ -13,7 +13,8 @@ def set_seed(seed: int):
 def calc_returns(
     rewards: torch.FloatTensor, 
     dones: torch.IntTensor, 
-    discount_rate: float) -> torch.FloatTensor:
+    discount_rate: float
+    ) -> torch.FloatTensor:
     """
     Generic calculation of returns
     """

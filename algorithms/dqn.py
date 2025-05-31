@@ -168,7 +168,9 @@ class DQNAgent:
         }
     
     def update_model(self):
+            
             if self.mini_batch_size <= len(self.buffer):
+
                 (
                     actions,
                     states,
@@ -319,6 +321,19 @@ class DQNAgent:
                     self.evaluate(env_name, self.num_eval_episodes)
                 )
                 print(self.eval_results[batch*steps_per_iter*num_envs])
+    
+    def record_observations(self, state, action, reward, next_state, done):
+        """
+        Records a single observation in the replay buffer.
+        """
+        transition = Transition(
+            action=action,
+            state=state,
+            reward=reward,
+            next_state=next_state,
+            done=done
+        )
+        self.buffer.insert(transition)
 
 
 
