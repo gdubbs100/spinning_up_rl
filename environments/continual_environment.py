@@ -23,6 +23,7 @@ class ContinualEnv(gym.Env):
     def reset(self, seed=None):
         return self.current_env_instance.reset()
     
+    ## TODO: review this logic -- environment should increment before step is taken
     def step(self, action):
         next_state, reward, terminated, truncated, info = self.current_env_instance.step(action)
         self.current_step += 1*self.num_parallel_envs

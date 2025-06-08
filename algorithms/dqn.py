@@ -192,15 +192,15 @@ class DQNAgent:
                     with torch.no_grad():
                         next_values = self.target_network(next_states).max(-1).values
 
-                criterion = nn.SmoothL1Loss()#nn.MSELoss()#
+                criterion = nn.MSELoss()#nn.SmoothL1Loss()#
                 loss = criterion(
                     values,
-                    rewards + self.discount_rate * next_values * (1 - dones)
+                    (rewards + self.discount_rate * next_values * (1 - dones)).float()
                 )
 
                 self.optimiser.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_value_(self.q_network.parameters(), 100)
+                # torch.nn.utils.clip_grad_value_(self.q_network.parameters(), 100)
                 self.optimiser.step()
             else:
                 loss = torch.tensor([0.])
@@ -209,19 +209,25 @@ class DQNAgent:
 
             return loss, values, next_values
 
-    def act(self, x):
+    def act(self, x, eval_mode=False):
 
-        self.increment_epsilon()
         Q = self.q_network(
             torch.tensor(x).to(self.device)
         )
-        if torch.rand(1) < self.epsilon:
-            # uniform sampling
-            action = dist.Categorical(
-                logits=torch.ones_like(Q)
-                ).sample()
+
+        if eval_mode:
+            self.increment_epsilon()
+
+            if torch.rand(1) < self.epsilon:
+                # uniform sampling
+                action = dist.Categorical(
+                    logits=torch.ones_like(Q)
+                    ).sample()
+            else:
+                action = torch.argmax(Q, dim=-1)
         else:
             action = torch.argmax(Q, dim=-1)
+
         return action, Q.max(dim=-1)[0]
 
     def increment_epsilon(self):
