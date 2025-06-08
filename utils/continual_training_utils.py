@@ -46,8 +46,8 @@ class ContinualTrainer:
         state, _ = self.env.reset()
         for i in range(
             0, 
-            self.env.steps_to_do + self.env.num_parallel_envs, 
-            self.env.num_parallel_envs
+            self.env.steps_to_do + num_parallel_envs, 
+            num_parallel_envs
         ):
             with torch.no_grad():
                     action, _ = self.agent.act(state)
@@ -71,21 +71,13 @@ class ContinualTrainer:
                     next_state[j], 
                     done[j]
                 )
-
-            # epoch_reward += reward.sum()
-            # self.logger.log(state, action, reward, next_state, done, info)
-            
+         
             state = next_state
 
-            ## TODO: this is DQN specific
-            ## TODO: make parameter
-            # if i % 1000 == 0:
-            #     self.agent.update_target_network()
-
             if i % update_every == 0:
-                # breakpoint()
+
                 loss, value, next_value = self.agent.update_model()
-                # breakpoint()
+
                 ## TODO: dqn specific
                 current_epsilon = self.agent.epsilon
                 self.logger.add_tensorboard(
@@ -109,14 +101,6 @@ class ContinualTrainer:
                     i
                 )
                 self.agent.update_target_network()
-
-                
-                # rewards[i] = epoch_reward / (update_every * num_parallel_envs)
-                # losses[i] = loss.detach().cpu().numpy()
-                # curr_task[i] = self.env.current_env
-                # print(f"Step {i+1}, Environment {self.env.current_env}:")
-                # print(f"Step loss: {loss}, step reward: {epoch_reward / steps_per_update}")
-                # epoch_reward = 0 # reset epoch reward
             
             if i % eval_every == 0:
                 tmp_task_rewards = self.evaluate(num_episodes=10)
@@ -138,16 +122,6 @@ class ContinualTrainer:
             if i % 1000 == 0:
                 self.logger.save_network(self.agent.q_network)
 
-
-
-                # curr_task[i] = self.env.current_env
-
-        # df = pd.DataFrame({
-        #     'epoch': rewards.keys(),
-        #     'rewards': pd.Series(rewards),
-        #     # 'losses': pd.Series(losses),
-        #     'curr_task': pd.Series(curr_task)
-        # })
         df = (
             pd.DataFrame(task_rewards)
             .T

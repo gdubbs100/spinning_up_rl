@@ -82,11 +82,11 @@ class ReplayBuffer():
         )
 
         return (
-            torch.tensor(np.array(actions)).to(self.device), ## only works for discrete actions
-            torch.tensor(np.array(states)).to(self.device),
-            torch.tensor(np.array(rewards)).to(self.device),
-            torch.tensor(np.array(dones), dtype=torch.int32).to(self.device),
-            torch.tensor(np.array(next_states)).to(self.device)
+            torch.tensor(actions, device=self.device), ## only works for discrete actions
+            torch.tensor(np.array(states), device=self.device),
+            torch.tensor(rewards, device=self.device).to(self.device),
+            torch.tensor(dones, dtype=torch.int32, device=self.device),
+            torch.tensor(np.array(next_states), device=self.device)
         )
 
         
@@ -231,8 +231,12 @@ class DQNAgent:
         return action, Q.max(dim=-1)[0]
 
     def increment_epsilon(self):
-        self.epsilon = self.eps_end + (self.eps_start - self.eps_end) * \
-            np.exp(-1. * self.steps_done / self.eps_decay)
+        # self.epsilon = self.eps_end + (self.eps_start - self.eps_end) * \
+        #     np.exp(-1. * self.steps_done / self.eps_decay)
+        self.epsilon = max(
+            self.eps_end, 
+            self.epsilon * self.eps_decay
+        )
         self.steps_done += 1
     
     def update_target_network(self):
