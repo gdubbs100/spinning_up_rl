@@ -35,6 +35,8 @@ class ContinualTrainer:
             self, 
             update_every: int,
             eval_every: int, 
+            save_network_every: int = 5000,
+            update_buffer_weights_every: int = 5000,
             # steps_per_epoch: int = 1000, 
             # epoch_update_freq: int = 1
         ):
@@ -50,7 +52,7 @@ class ContinualTrainer:
             num_parallel_envs
         ):
             with torch.no_grad():
-                    action, _ = self.agent.act(state)
+                    action, value = self.agent.act(state)
                 
             ## TODO: create torch wrapper
             (
@@ -60,23 +62,38 @@ class ContinualTrainer:
                 truncated, 
                 info
             ) = self.env.step(action.cpu().numpy())
-            done = [any(i) for i in zip(terminated, truncated)]
 
+            ## manually reset envs (default gym parallel envs auto-reset)
+            done = [any(i) for i in zip(terminated, truncated)]
+            done_indices = [i for i, d in enumerate(done) if d]
+            if done_indices:
+                next_state, info = self.env.reset(options={"indices":done_indices})
+            
             ## NOTE: this bit of logic is specific to dqn agents
+            ## calculate weights for prioritised experience replay
+            targets, _ = self.agent.calculate_td_error(
+                    torch.tensor(next_state, device=self.agent.device), 
+                    torch.tensor(reward, device=self.agent.device),
+                    torch.tensor(done, dtype=torch.int32, device=self.agent.device)
+                )
+            weights = torch.abs(value - targets)
+            
             for j in range(num_parallel_envs):
+
                 self.agent.record_observations(
                     state[j], 
                     action[j], 
                     reward[j], 
                     next_state[j], 
-                    done[j]
+                    done[j],
+                    weights[j]
                 )
-         
+
             state = next_state
 
             if i % update_every == 0:
 
-                loss, value, next_value = self.agent.update_model()
+                loss, value, next_value, weights = self.agent.update_model()
 
                 ## TODO: dqn specific
                 current_epsilon = self.agent.epsilon
@@ -93,6 +110,11 @@ class ContinualTrainer:
                 self.logger.add_tensorboard(
                     f"training/task_{self.env.current_env}_next_values",
                     next_value.mean().detach().cpu().numpy(),
+                    i
+                )
+                self.logger.add_tensorboard(
+                    f"training/task_{self.env.current_env}_weights",
+                    weights.mean().detach().cpu().numpy(),
                     i
                 )
                 self.logger.add_tensorboard(
@@ -114,13 +136,20 @@ class ContinualTrainer:
                         avg_reward, 
                         i
                     )
+
                 print("\n====================================================\n")
                 task_rewards[i] = tmp_task_rewards
 
             ## TODO: save networks every ...
             ## add network saving method to logger class
-            if i % 1000 == 0:
+            if i % save_network_every == 0:
                 self.logger.save_network(self.agent.q_network)
+            
+            # TODO: every x steps update value estimates for experience replay buffer
+            ## perhaps make this a method for the replay buffer, and pass the agent to it
+            if i % update_buffer_weights_every == 0:
+                print(f"Updating buffer weights at step {i}...")
+                self.agent.update_buffer_weights()
 
         df = (
             pd.DataFrame(task_rewards)

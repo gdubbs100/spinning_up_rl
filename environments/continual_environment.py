@@ -20,8 +20,8 @@ class ContinualEnv(gym.Env):
         self.action_space = self.current_env_instance.action_space
         self.observation_space = self.current_env_instance.observation_space
     
-    def reset(self, seed=None):
-        return self.current_env_instance.reset()
+    def reset(self, seed=None, options=None):
+        return self.current_env_instance.reset(options=options)
     
     ## TODO: review this logic -- environment should increment before step is taken
     def step(self, action):

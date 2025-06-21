@@ -1,6 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import torch.distributions as dist
 from torch.utils.data import Dataset, RandomSampler
@@ -14,12 +15,13 @@ import numpy.random
 
 class Transition:
 
-    def __init__(self, action, state, reward, next_state, done):
+    def __init__(self, action, state, reward, next_state, done, weight=1.):
         self.action = action
         self.state = state
         self.reward = reward
         self.done = done
         self.next_state = next_state
+        self.weight = weight
     
     def __repr__(self):
         return f"""
@@ -27,7 +29,8 @@ class Transition:
         \nstate: {self.state},
         \nreward: {self.reward},
         \ndone: {int(self.done)},
-        \nnext_state: {self.next_state}
+        \nnext_state: {self.next_state},
+        \nweight: {self.weight}
         """
 
 class ReplayBuffer():
@@ -36,7 +39,7 @@ class ReplayBuffer():
         self, 
         device,
         max_size: int, 
-        weight_func: callable = lambda x: [1/len(x)]*len(x),
+        weight_func: callable = lambda x: F.softmax(torch.tensor([i.weight/10 for i in x]), dim=0).numpy(),
         with_replacement: bool = False
     ):
         self.device = device
@@ -75,18 +78,54 @@ class ReplayBuffer():
             states,
             rewards,
             dones,
-            next_states
+            next_states,
+            weights
         ) = zip(
-                *[(i.action, i.state, i.reward, i.done, i.next_state) 
+                *[(i.action, i.state, i.reward, i.done, i.next_state, i.weight) 
                 for i in self.sample_transitions(num_samples)]
         )
 
+        return self.process_batch(
+            actions, 
+            states, 
+            rewards, 
+            dones, 
+            next_states,
+            weights
+        )
+    
+    def process_batch(self, actions, states, rewards, dones, next_states, weights):
         return (
             torch.tensor(actions, device=self.device), ## only works for discrete actions
             torch.tensor(np.array(states), device=self.device),
-            torch.tensor(rewards, device=self.device).to(self.device),
+            torch.tensor(rewards, device=self.device),
             torch.tensor(dones, dtype=torch.int32, device=self.device),
-            torch.tensor(np.array(next_states), device=self.device)
+            torch.tensor(np.array(next_states), device=self.device),
+            torch.tensor(weights, device=self.device)
+        )
+    
+    def get_all_transitions(self):
+        """
+        Returns all transitions in the buffer as a list of Transition objects.
+        """
+        (
+            actions,
+            states,
+            rewards,
+            dones,
+            next_states,
+            weights
+        ) = zip(
+                *[(i.action, i.state, i.reward, i.done, i.next_state, i.weight) 
+                for i in self.transitions]
+        )
+        return self.process_batch(
+            actions, 
+            states, 
+            rewards, 
+            dones, 
+            next_states,
+            weights
         )
 
         
@@ -167,6 +206,30 @@ class DQNAgent:
             'episode_len': episode_len
         }
     
+    def calculate_td_error(
+        self,
+        next_states: torch.Tensor,
+        rewards: torch.Tensor,
+        dones: torch.Tensor
+    ):
+        
+        if self.double_dqn:
+            with torch.no_grad():
+                
+                next_actions =  torch.argmax(self.q_network(next_states), dim=-1)
+                next_values = self.target_network(next_states)[
+                    torch.arange(next_states.size(0)), 
+                    next_actions
+                ]
+
+        else:
+            with torch.no_grad():
+                next_values = self.target_network(next_states).max(-1).values
+        return (
+            (rewards + self.discount_rate * next_values * (1 - dones)).float(),
+            next_values
+        )
+    
     def update_model(self):
             
             if self.mini_batch_size <= len(self.buffer):
@@ -176,26 +239,24 @@ class DQNAgent:
                     states,
                     rewards,
                     dones,
-                    next_states
+                    next_states,
+                    weights
                 ) = self.buffer.sample(self.mini_batch_size)
 
                 # create computation graph
                 values = self.q_network(states)[torch.arange(self.mini_batch_size), actions]
+                
+                # calculate target values
+                target, next_values = self.calculate_td_error(
+                    next_states,
+                    rewards,
+                    dones
+                )
 
-                if self.double_dqn:
-                    with torch.no_grad():
-                        
-                        next_actions =  torch.argmax(self.q_network(next_states), dim=-1)
-                        next_values = self.target_network(next_states)[torch.arange(self.mini_batch_size), next_actions]
-
-                else:
-                    with torch.no_grad():
-                        next_values = self.target_network(next_states).max(-1).values
-
-                criterion = nn.MSELoss()#nn.SmoothL1Loss()#
+                criterion = nn.MSELoss()
                 loss = criterion(
                     values,
-                    (rewards + self.discount_rate * next_values * (1 - dones)).float()
+                    target
                 )
 
                 self.optimiser.zero_grad()
@@ -206,8 +267,9 @@ class DQNAgent:
                 loss = torch.tensor([0.])
                 values = torch.tensor([0.])
                 next_values = torch.tensor([0.])
+                weights = torch.tensor([0.])
 
-            return loss, values, next_values
+            return loss, values, next_values, weights
 
     def act(self, x, eval_mode=False):
 
@@ -231,12 +293,12 @@ class DQNAgent:
         return action, Q.max(dim=-1)[0]
 
     def increment_epsilon(self):
-        # self.epsilon = self.eps_end + (self.eps_start - self.eps_end) * \
-        #     np.exp(-1. * self.steps_done / self.eps_decay)
-        self.epsilon = max(
-            self.eps_end, 
-            self.epsilon * self.eps_decay
-        )
+        self.epsilon = self.eps_end + (self.eps_start - self.eps_end) * \
+            np.exp(-1. * self.steps_done / self.eps_decay)
+        # self.epsilon = max(
+        #     self.eps_end, 
+        #     self.epsilon * self.eps_decay
+        # )
         self.steps_done += 1
     
     def update_target_network(self):
@@ -332,7 +394,18 @@ class DQNAgent:
                 )
                 print(self.eval_results[batch*steps_per_iter*num_envs])
     
-    def record_observations(self, state, action, reward, next_state, done):
+    ## TODO: update this to perform prioritised experience replay
+    ## could add num iters?
+    ## or do I do it in the training loop?
+    def record_observations(
+            self, 
+            state, 
+            action, 
+            reward, 
+            next_state, 
+            done,
+            weight
+        ):
         """
         Records a single observation in the replay buffer.
         """
@@ -341,9 +414,45 @@ class DQNAgent:
             state=state,
             reward=reward,
             next_state=next_state,
-            done=done
+            done=done,
+            weight=weight
         )
         self.buffer.insert(transition)
+    
+    def update_buffer_weights(self):
+        (
+            actions, 
+            states, 
+            rewards, 
+            dones, 
+            next_states,
+            _
+        ) = self.buffer.get_all_transitions()
+        with torch.no_grad():
+            values = self.q_network(states)[
+                torch.arange(states.size(0)), 
+                actions
+            ]
+        targets, _ = self.calculate_td_error(
+            next_states, 
+            rewards,
+            dones
+        )
+        weights = torch.abs(values - targets)
+
+        # Create new transitions with updated weights
+        new_transitions = [Transition(
+            action=actions[i],
+            state=states[i],
+            reward=rewards[i],
+            next_state=next_states[i],
+            done=dones[i],
+            weight=weights[i]
+        ) for i in range(len(self.buffer.transitions))]
+        # Sort transitions by weight in descending order
+        new_transitions.sort(key=lambda t: t.weight, reverse=True)
+
+        self.buffer.transitions = new_transitions
 
 
 
